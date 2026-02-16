@@ -1,86 +1,86 @@
+
 import streamlit as st
 import yfinance as yf
-import pandas_ta as ta
-import plotly.graph_objects as go
-from datetime import datetime
+import pandas as pd
+import numpy as np
+from streamlit_tts import text_to_speech
 
-# --- Page Config ---
-st.set_page_config(page_title="My Stock AI Pro", layout="wide")
+# 1. Professional Page Setup
+st.set_page_config(page_title="Master Stocks Pro 2026", layout="wide")
 
-# --- Custom Styling ---
+# Custom CSS for Professional Design
 st.markdown("""
     <style>
-    .stMetric { background-color: #1e2130; padding: 15px; border-radius: 10px; }
+    .main { background-color: #0E1117; color: white; }
+    .stMetric { background-color: #1e2130; padding: 15px; border-radius: 10px; border: 1px solid #4B506D; }
+    [data-testid="stMetricValue"] { color: #00FFC2 !important; }
+    .buy-signal { color: #00FF7F; font-weight: bold; font-size: 24px; border: 2px solid #00FF7F; padding: 10px; border-radius: 5px; text-align: center; }
+    .sell-signal { color: #FF4B4B; font-weight: bold; font-size: 24px; border: 2px solid #FF4B4B; padding: 10px; border-radius: 5px; text-align: center; }
+    .neutral-signal { color: #FFA500; font-weight: bold; font-size: 24px; border: 2px solid #FFA500; padding: 10px; border-radius: 5px; text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- Sidebar ---
-st.sidebar.header("🛠️ Control Panel")
-# Aap yahan koi bhi Indian stock likh sakte hain (e.g. TCS.NS, ZOMATO.NS)
-symbol = st.sidebar.text_input("Stock Ticker", value="RELIANCE.NS").upper()
-time_range = st.sidebar.select_slider("Select Timeframe", options=['1mo', '3mo', '6mo', '1y', '5y'])
+# 2. RSI Logic Function
+def get_rsi(data, window=14):
+    delta = data.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
 
-# --- Data Engine ---
-@st.cache_data(ttl=600) # 10 min cache
-def load_data(ticker, period):
-    try:
-        data = yf.download(ticker, period=period, interval="1d")
-        return data
-    except:
-        return None
+st.title("🚀 Master Stocks - Smart Terminal")
 
-data = load_data(symbol, time_range)
+# Sidebar for Input
+with st.sidebar:
+    st.header("Settings")
+    ticker = st.text_input("Stock Ticker", value="RELIANCE.NS")
+    period = st.selectbox("Select Duration", ["1mo", "3mo", "6mo", "1y"])
+    speak_btn = st.button("🔊 Listen to Analysis")
 
-# --- App Layout ---
-st.title(f"🚀 {symbol} Live Intelligence")
-st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+# 3. Data Processing
+try:
+    df = yf.download(ticker, period=period, interval="1d")
+    if not df.empty:
+        df['RSI'] = get_rsi(df['Close'])
+        latest_price = float(df['Close'].iloc[-1])
+        latest_rsi = float(df['RSI'].iloc[-1])
+        prev_price = float(df['Close'].iloc[-2])
+        price_diff = latest_price - prev_price
+        
+        # UI Columns
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Current Price", f"₹{latest_price:,.2f}", f"{price_diff:,.2f}")
+        col2.metric("RSI Momentum", f"{latest_rsi:.1f}")
+        
+        # Buy/Sell Logic
+        with col3:
+            st.write("### Market Signal")
+            if latest_rsi < 30:
+                st.markdown('<div class="buy-signal">STRONG BUY</div>', unsafe_allow_html=True)
+                signal_text = "Buy"
+            elif latest_rsi > 70:
+                st.markdown('<div class="sell-signal">STRONG SELL</div>', unsafe_allow_html=True)
+                signal_text = "Sell"
+            else:
+                st.markdown('<div class="neutral-signal">NEUTRAL</div>', unsafe_allow_html=True)
+                signal_text = "Wait"
 
-if data is not None and not data.empty:
-    # Indicators Calculation
-    data['RSI'] = ta.rsi(data['Close'], length=14)
-    
-    # --- Row 1: Metrics (Safe Version) ---
-    m1, m2, m3, m4 = st.columns(4)
-    
-    # Prices and Change
-    curr_p = float(data['Close'].iloc[-1])
-    prev_p = float(data['Close'].iloc[-2])
-    change = ((curr_p - prev_p) / prev_p) * 100
-    
-    # Displaying Metrics
-    m1.metric("Current Price", f"₹{curr_p:,.2f}", f"{change:.2f}%")
-    
-    rsi_val = data['RSI'].iloc[-1]
-    m2.metric("RSI (Momentum)", f"{rsi_val:.1f}" if not pd.isna(rsi_val) else "Wait..")
-    
-    m3.metric("Highest (Period)", f"₹{data['High'].max():,.0f}")
-    m4.metric("Lowest (Period)", f"₹{data['Low'].min():,.0f}")
+        # Chart Display
+        st.line_chart(df['Close'], use_container_width=True)
 
-    # --- Row 2: Live Candlestick Chart ---
-    st.subheader("🕯️ Market Trend")
-    fig = go.Figure(data=[go.Candlestick(x=data.index,
-                    open=data['Open'], high=data['High'],
-                    low=data['Low'], close=data['Close'], name='Price')])
-    fig.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=10, b=10))
-    st.plotly_chart(fig, use_container_width=True)
+        # 4. Speak Command Logic
+        if speak_btn:
+            msg = f"The price of {ticker} is {latest_price:.1f} rupees. The R.S.I value is {latest_rsi:.1f}. "
+            if signal_text == "Buy":
+                msg += "Stock is oversold. This might be a good buying opportunity."
+            elif signal_text == "Sell":
+                msg += "Stock is overbought. You should consider selling or booking profits."
+            else:
+                msg += "The market is in neutral zone. Please wait for a clear signal."
+            text_to_speech(msg, language='en')
 
-    # --- Row 3: AI Verdict ---
-    st.divider()
-    st.subheader("🧠 AI Investment Verdict")
-    
-    if not pd.isna(rsi_val):
-        if rsi_val < 35:
-            st.success(f"🔥 **BUY SIGNAL:** {symbol} is Oversold. High probability of bounce back!")
-        elif rsi_val > 65:
-            st.error(f"⚠️ **SELL SIGNAL:** {symbol} is Overbought. Price might fall soon!")
-        else:
-            st.info(f"⚖️ **NEUTRAL:** {symbol} is in stable zone. Hold and Watch.")
     else:
-        st.warning("Collecting more data for RSI...")
+        st.error("Invalid Ticker or No Data Found.")
 
-else:
-    st.error("Error: Stock symbol galat hai ya data nahi mil raha. Please check (e.g. RELIANCE.NS)")
-
-# Footer
-st.markdown("---")
-st.write("Built with ❤️ for Indian Traders")
+except Exception as e:
+    st.error(f"Error: {e}")
