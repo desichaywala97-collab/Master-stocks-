@@ -1,45 +1,26 @@
 import streamlit as st
-import subprocess
-import sys
-import time
 
-# --- 1. SILENT AUTO-INSTALLER (Yfinance Error Fix) ---
+# --- SABSE PEHLE LIBRARIES CHECK KAREIN ---
 try:
     import yfinance as yf
-except ImportError:
-    # Agar library nahi hai, toh ye line use install kar degi
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "yfinance"])
-    import yfinance as yf
+    import pandas as pd
+    import numpy as np
+except ImportError as e:
+    st.error(f"Missing Library: {e}. Please wait 1 minute for installation...")
+    st.stop()
 
-import pandas as pd
-import numpy as np
-
-# --- 2. PROFESSIONAL DESIGN (Trading Terminal Look) ---
+# --- DESIGN & LOOK ---
 st.set_page_config(page_title="Master Stocks AI", layout="wide")
 
 st.markdown("""
     <style>
-    .main { background-color: #0E1117; }
-    div[data-testid="stMetric"] {
-        background-color: #1e2130;
-        border: 1px solid #4B506D;
-        padding: 20px;
-        border-radius: 12px;
-    }
-    .neutral-box {
-        color: #FFA500;
-        font-weight: bold;
-        border: 1px solid #FFA500;
-        padding: 12px;
-        border-radius: 8px;
-        text-align: center;
-        background-color: rgba(255, 165, 0, 0.1);
-    }
+    .stMetric { background-color: #1e2130; border: 1px solid #4B506D; padding: 20px; border-radius: 12px; }
+    .status-box { padding: 15px; border-radius: 10px; font-weight: bold; text-align: center; border: 1px solid #FFA500; color: #FFA500; background: rgba(255,165,0,0.1); }
     [data-testid="stMetricValue"] { color: #00FFC2 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. RSI LOGIC ---
+# --- RSI LOGIC ---
 def get_rsi(data, window=14):
     delta = data.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
@@ -47,64 +28,48 @@ def get_rsi(data, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# --- 4. APP INTERFACE ---
-st.title("🛡️ Master Stocks AI Terminal")
+# --- UI ---
+st.title("📈 Master Stocks AI Terminal")
 
-# Sidebar inputs
 with st.sidebar:
-    st.header("Search")
     symbol = st.text_input("Enter Stock Symbol", "RELIANCE.NS")
-    duration = st.selectbox("Select Duration", ["1mo", "6mo", "1y"])
-    st.divider()
-    speak_trigger = st.button("🔊 Listen Audio Analysis")
+    duration = st.selectbox("Duration", ["1mo", "6mo", "1y"])
+    speak_btn = st.button("🔊 Listen Analysis")
 
-# --- 5. DATA PROCESSING ---
 try:
-    # Fetching live data from Yahoo Finance
     df = yf.download(symbol, period=duration)
     
     if not df.empty:
         df['RSI'] = get_rsi(df['Close'])
-        latest_price = float(df['Close'].iloc[-1])
-        latest_rsi = float(df['RSI'].iloc[-1])
-        
-        # --- LOOK: LIVE PRICE | RSI | MARKET STATUS ---
-        col1, col2, col3 = st.columns(3)
-        
-        col1.metric("Live Price", f"₹{latest_price:,.2f}")
-        col2.metric("RSI (14D)", f"{latest_rsi:.1f}")
-        
-        with col3:
-            st.write("Market Signal")
-            if latest_rsi < 30:
-                st.success("🚀 BUY SIGNAL")
-                msg = "Oversold zone. Market is Bullish."
-            elif latest_rsi > 70:
-                st.error("⚠️ SELL SIGNAL")
-                msg = "Overbought zone. Market is Bearish."
-            else:
-                st.markdown('<div class="neutral-box">⚖️ Market is Neutral</div>', unsafe_allow_html=True)
-                msg = "Market is in neutral range. No clear trend."
+        lp = float(df['Close'].iloc[-1])
+        rv = float(df['RSI'].iloc[-1])
 
-        # CHART
+        # METRICS: Live Price | RSI | Status
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Live Price", f"₹{lp:,.2f}")
+        c2.metric("RSI (14D)", f"{rv:.1f}")
+        
+        with c3:
+            st.write("Market Signal")
+            if rv < 35:
+                st.success("🚀 BUY SIGNAL (Oversold)")
+                msg = "Market is Oversold. Buying opportunity."
+            elif rv > 65:
+                st.error("⚠️ SELL SIGNAL (Overbought)")
+                msg = "Market is Overbought. Selling opportunity."
+            else:
+                st.markdown('<div class="status-box">⚖️ Market is Neutral</div>', unsafe_allow_html=True)
+                msg = "Market is Neutral. Stay cautious."
+
         st.line_chart(df['Close'])
 
-        # --- SPEAK COMMAND ---
-        if speak_trigger:
-            full_speech = f"Analysis for {symbol}. Current price is {latest_price:.1f}. RSI is {latest_rsi:.1f}. {msg}"
-            # JavaScript voice engine (Har browser par chalega)
-            st.components.v1.html(f"""
-                <script>
-                var msg = new SpeechSynthesisUtterance('{full_speech}');
-                window.speechSynthesis.speak(msg);
-                </script>
-            """, height=0)
-            
+        # VOICE
+        if speak_btn:
+            full_txt = f"Stock {symbol}. Current price {lp:.1f}. RSI is {rv:.1f}. {msg}"
+            st.components.v1.html(f"<script>window.speechSynthesis.speak(new SpeechSynthesisUtterance('{full_txt}'));</script>", height=0)
+
     else:
-        st.warning("Data fetch nahi ho raha. Symbol sahi likhein (Example: SBIN.NS or AAPL)")
+        st.warning("Invalid Ticker. Please check the symbol.")
 
 except Exception as e:
-    st.info("System is initializing... Please wait 10 seconds.")
-
-st.divider()
-st.caption("Master Stocks Pro | Empowering Traders with AI")
+    st.error(f"Data Fetch Error: {e}")
