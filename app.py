@@ -1,98 +1,100 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 import numpy as np
 
-# 1. Professional Page Setup
-st.set_page_config(page_title="Master Stocks Pro 2026", layout="wide")
+# Error handling for missing libraries
+try:
+    import yfinance as yf
+except ImportError:
+    st.error("Missing Library: Please run 'pip install yfinance' in your terminal.")
+    st.stop()
 
-# Custom CSS for Professional Design (Dark Mode UI)
+# 1. Page Config & Professional Styling
+st.set_page_config(page_title="Master Stocks AI", layout="wide", initial_sidebar_state="expanded")
+
 st.markdown("""
     <style>
-    .main { background-color: #0E1117; color: white; }
-    .stMetric { background-color: #1e2130; padding: 15px; border-radius: 10px; border: 1px solid #4B506D; }
-    [data-testid="stMetricValue"] { color: #00FFC2 !important; }
-    .buy-signal { color: #00FF7F; font-weight: bold; font-size: 24px; border: 2px solid #00FF7F; padding: 10px; border-radius: 5px; text-align: center; background-color: rgba(0, 255, 127, 0.1); }
-    .sell-signal { color: #FF4B4B; font-weight: bold; font-size: 24px; border: 2px solid #FF4B4B; padding: 10px; border-radius: 5px; text-align: center; background-color: rgba(255, 75, 75, 0.1); }
-    .neutral-signal { color: #FFA500; font-weight: bold; font-size: 24px; border: 2px solid #FFA500; padding: 10px; border-radius: 5px; text-align: center; background-color: rgba(255, 165, 0, 0.1); }
+    .main { background-color: #0E1117; }
+    .metric-card { background-color: #1e2130; padding: 20px; border-radius: 12px; border: 1px solid #3e445e; text-align: center; }
+    .signal-box { padding: 15px; border-radius: 8px; font-weight: bold; font-size: 20px; margin-top: 10px; text-align: center; }
+    .buy { background-color: rgba(0, 255, 127, 0.2); color: #00FF7F; border: 1px solid #00FF7F; }
+    .sell { background-color: rgba(255, 75, 75, 0.2); color: #FF4B4B; border: 1px solid #FF4B4B; }
+    .hold { background-color: rgba(255, 165, 0, 0.2); color: #FFA500; border: 1px solid #FFA500; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. RSI Calculation Function
-def get_rsi(data, window=14):
-    delta = data.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+# 2. Advanced Functions (RSI & MACD)
+def calculate_indicators(data):
+    # RSI
+    delta = data['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
-    return 100 - (100 / (1 + rs))
+    data['RSI'] = 100 - (100 / (1 + rs))
+    
+    # MACD
+    exp1 = data['Close'].ewm(span=12, adjust=False).mean()
+    exp2 = data['Close'].ewm(span=26, adjust=False).mean()
+    data['MACD'] = exp1 - exp2
+    data['Signal_Line'] = data['MACD'].ewm(span=9, adjust=False).mean()
+    return data
 
-# 3. JavaScript Voice Function (No Library Needed)
-def speak_text(text):
-    js_code = f"""
-    <script>
-    var msg = new SpeechSynthesisUtterance("{text}");
-    window.speechSynthesis.speak(msg);
-    </script>
-    """
+# 3. JavaScript Speak Function
+def speak_analysis(text):
+    js_code = f"""<script>var m = new SpeechSynthesisUtterance("{text}");window.speechSynthesis.speak(m);</script>"""
     st.components.v1.html(js_code, height=0)
 
-st.title("📈 Master Stocks - Professional Terminal")
+# 4. App Header
+st.title("🛡️ Master Stocks AI Terminal")
+st.subheader("Smart Analysis for 2026 Trading")
 
-# Sidebar for Input
+# Sidebar
 with st.sidebar:
-    st.header("Control Panel")
-    ticker = st.text_input("Stock Ticker", value="RELIANCE.NS")
-    period = st.selectbox("Select Duration", ["1mo", "3mo", "6mo", "1y"])
-    st.info("Example: RELIANCE.NS, TATAMOTORS.NS, TSLA, AAPL")
+    st.header("Search Parameters")
+    symbol = st.text_input("Enter Ticker (e.g. AAPL, BTC-USD)", "RELIANCE.NS")
+    timeframe = st.selectbox("Interval", ["1mo", "6mo", "1y", "5y"])
+    analyze_btn = st.button("🚀 Run AI Analysis")
 
-# 4. Data Processing & Logic
+# 5. Main Logic
 try:
-    df = yf.download(ticker, period=period, interval="1d")
-    
+    df = yf.download(symbol, period=timeframe)
     if not df.empty:
-        # RSI Calculation
-        df['RSI'] = get_rsi(df['Close'])
-        latest_price = float(df['Close'].iloc[-1])
-        latest_rsi = float(df['RSI'].iloc[-1])
-        prev_price = float(df['Close'].iloc[-2])
-        price_diff = latest_price - prev_price
+        df = calculate_indicators(df)
+        last_price = float(df['Close'].iloc[-1])
+        last_rsi = float(df['RSI'].iloc[-1])
+        last_macd = float(df['MACD'].iloc[-1])
+        last_sig = float(df['Signal_Line'].iloc[-1])
         
-        # Display Metrics
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Current Price", f"₹{latest_price:,.2f}", f"{price_diff:,.2f}")
-        
-        # Safe RSI Display
-        rsi_display = f"{latest_rsi:.1f}" if not pd.isna(latest_rsi) else "Loading.."
-        col2.metric("RSI Momentum", rsi_display)
-        
-        # Buy/Sell Logic UI
-        with col3:
-            st.write("### Market Signal")
-            if latest_rsi < 30:
-                st.markdown('<div class="buy-signal">STRONG BUY</div>', unsafe_allow_html=True)
-                signal_status = "Oversold. This is a strong buy opportunity."
-            elif latest_rsi > 70:
-                st.markdown('<div class="sell-signal">STRONG SELL</div>', unsafe_allow_html=True)
-                signal_status = "Overbought. You should consider selling."
+        # Display Row 1
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("Live Price", f"₹{last_price:,.2f}")
+        with c2:
+            st.metric("RSI (14)", f"{last_rsi:.1f}")
+        with c3:
+            # Signal Logic
+            if last_rsi < 35 and last_macd > last_sig:
+                st.markdown('<div class="signal-box buy">🚀 STRONG BUY</div>', unsafe_allow_html=True)
+                advice = "Stock is oversold with a bullish crossover. Good time to buy."
+            elif last_rsi > 65 and last_macd < last_sig:
+                st.markdown('<div class="signal-box sell">⚠️ SELL NOW</div>', unsafe_allow_html=True)
+                advice = "Stock is overbought. Book your profits now."
             else:
-                st.markdown('<div class="neutral-signal">NEUTRAL</div>', unsafe_allow_html=True)
-                signal_status = "in Neutral zone. Wait for a clear trend."
+                st.markdown('<div class="signal-box hold">⚖️ HOLD / NEUTRAL</div>', unsafe_allow_html=True)
+                advice = "Market is stable. Wait for a clear RSI or MACD breakout."
 
         # Chart
-        st.subheader(f"Price Analysis: {ticker}")
-        st.line_chart(df['Close'], use_container_width=True)
+        st.line_chart(df['Close'])
 
-        # 5. Speak Feature
-        if st.button("🔊 Listen to Audio Analysis"):
-            speech_msg = f"Analysis for {ticker}. The current price is {latest_price:.1f}. The R.S.I is {rsi_display}. The market is {signal_status}"
-            speak_text(speech_msg)
-
+        # Speak Logic
+        if analyze_btn:
+            speech_text = f"Master Stocks Analysis for {symbol}. Current price is {last_price:.1f}. RSI is {last_rsi:.1f}. Our recommendation is {advice}"
+            speak_analysis(speech_text)
+            
     else:
-        st.warning("Please enter a valid stock ticker.")
-
+        st.warning("No data found for this symbol.")
 except Exception as e:
-    st.error(f"An error occurred: {e}")
+    st.error(f"Connect Error: {e}")
 
-# Footer
-st.markdown("---")
-st.caption("Powered by Master Stocks AI Terminal 2026")
+st.divider()
+st.caption("Master Stocks Pro | AI Driven Financial Insights")
