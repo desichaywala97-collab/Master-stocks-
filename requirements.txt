@@ -1,4 +1,5 @@
-yfinance
-pandas-ta
-plotly
 streamlit
+yfinance
+pandas
+numpy
+streamlit-tts
